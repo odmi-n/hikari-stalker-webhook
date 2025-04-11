@@ -19,7 +19,7 @@ def get_latest_companies():
         cursor = conn.cursor()
 
         # 最新の日付を取得
-        cursor.execute("SELECT MAX(date) FROM reports")
+        cursor.execute("SELECT MAX(report_date) FROM processed_reports")
         latest_date = cursor.fetchone()[0]
 
         if not latest_date:
@@ -27,9 +27,9 @@ def get_latest_companies():
 
         # その日付に該当する全企業を取得
         cursor.execute("""
-            SELECT company_name, stock_code, document_type
-            FROM reports
-            WHERE date = ?
+            SELECT target_company, security_code, report_type
+            FROM processed_reports
+            WHERE report_date = ?
         """, (latest_date,))
         rows = cursor.fetchall()
         conn.close()
