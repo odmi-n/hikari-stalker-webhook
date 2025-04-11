@@ -8,6 +8,10 @@ from linebot.v3.messaging import TextMessage, QuickReply, QuickReplyItem, Messag
 import os
 import logging
 import sys
+from dotenv import load_dotenv
+
+# .env ファイルから環境変数を読み込む
+load_dotenv()
 
 # hikari-py ディレクトリを import 可能にする
 sys.path.append(os.path.abspath("../hikari-py"))
