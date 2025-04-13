@@ -139,6 +139,14 @@ def handle_text_message(event):
     # すべての受信パターンに対応するために、前処理でテキストを標準化
     normalized_text = text.strip()
     
+    # テキストの前方一致チェック関数
+    def starts_with_any(text, prefixes):
+        return any(text.startswith(prefix) for prefix in prefixes)
+    
+    # テキストの部分一致チェック関数
+    def contains_any(text, keywords):
+        return any(keyword in text for keyword in keywords)
+    
     if normalized_text == "光通信を分析":
         # 最新の銘柄を取得して QuickReply を動的に作成
         try:
@@ -195,8 +203,9 @@ def handle_text_message(event):
                 }
             )
     
-    elif normalized_text == "今日の株みくじをする！🥠" or normalized_text == "今日の株みくじ🍀" or normalized_text == "今日の株みくじ" or normalized_text == "今日の株みくじをする":
-        app.logger.info(f"🎯 株みくじ機能を実行します")
+    # 株みくじは完全一致のみを受け付ける
+    elif normalized_text == "今日の株みくじをする！":
+        app.logger.info(f"🎯 株みくじ機能を実行します - 完全一致")
         # 株みくじ機能を直接実行
         fortune = get_todays_stock_fortune()
         if fortune:
@@ -218,22 +227,8 @@ def handle_text_message(event):
             )
     
     elif normalized_text.startswith("株みくじ:"):
-        # 気分を取得
-        mood = normalized_text.replace("株みくじ:", "").strip()
-        if mood == "おまかせ":
-            mood = None
-        
-        # 気分に合わせた株みくじを取得
-        fortune = get_todays_stock_fortune(mood)
-        if fortune:
-            today = datetime.now().strftime('%Y年%m月%d日')
-            mood_text = f"【{mood}な気分向け】" if mood else ""
-            reply = f"🎯 {today}の株みくじ {mood_text}\n\n" \
-                    f"【{fortune['name']}】({fortune['code']})\n" \
-                    f"業種：{fortune['sector']}\n" \
-                    f"コメント：{fortune['comment']}"
-        else:
-            reply = "😢 株みくじデータを読み込めませんでした。"
+        # 株みくじ:で始まるテキストも受け付けない
+        reply = "⚠️ この機能は現在ご利用いただけません。「今日の株みくじをする！」とメッセージを送信してください。"
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -245,6 +240,8 @@ def handle_text_message(event):
             )
     
     else:
+        # デバッグ用に受信したメッセージが未処理だった場合、詳細なログを記録
+        app.logger.warning(f"⚠️ 未処理のメッセージ: 「{text}」")
         reply = f"🤖 メッセージを受け取りました: 「{text}」\n（後で分析Botに接続予定）"
         
         with ApiClient(configuration) as api_client:
