@@ -133,8 +133,13 @@ def get_todays_stock_fortune(mood=None):
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     text = event.message.text
+    app.logger.info(f"📩 受信テキスト: 「{text}」")
+    app.logger.info(f"📩 イベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
     
-    if text == "光通信を分析":
+    # すべての受信パターンに対応するために、前処理でテキストを標準化
+    normalized_text = text.strip()
+    
+    if normalized_text == "光通信を分析":
         # 最新の銘柄を取得して QuickReply を動的に作成
         try:
             companies = get_latest_companies_by_date(limit=5)
@@ -176,8 +181,8 @@ def handle_text_message(event):
                     }
                 )
     
-    elif text.startswith("詳細:"):
-        company_name = text.replace("詳細:", "").strip()
+    elif normalized_text.startswith("詳細:"):
+        company_name = normalized_text.replace("詳細:", "").strip()
         # TODO: company_name を使って要約処理（summarizer.py）へ渡す
         reply = f"🔎 {company_name} の詳細分析を開始します（仮）"
         
@@ -190,36 +195,31 @@ def handle_text_message(event):
                 }
             )
     
-    elif text == "今日の株みくじをする！🥠":
-        # クイックリプライで気分を選択できるようにする
-        quick_reply_items = [
-            QuickReplyItem(action=MessageAction(label="積極的な気分", text="株みくじ:積極的")),
-            QuickReplyItem(action=MessageAction(label="保守的な気分", text="株みくじ:保守的")),
-            QuickReplyItem(action=MessageAction(label="冒険的な気分", text="株みくじ:冒険的")),
-            QuickReplyItem(action=MessageAction(label="長期で考えたい", text="株みくじ:長期的")),
-            QuickReplyItem(action=MessageAction(label="短期で考えたい", text="株みくじ:短期的")),
-            QuickReplyItem(action=MessageAction(label="おまかせ", text="株みくじ:おまかせ"))
-        ]
-        
-        reply = "🎯 今日の気分はどうですか？あなたの気分に合った銘柄をご紹介します！"
+    elif normalized_text == "今日の株みくじをする！🥠" or normalized_text == "今日の株みくじ🍀" or normalized_text == "今日の株みくじ" or normalized_text == "今日の株みくじをする":
+        app.logger.info(f"🎯 株みくじ機能を実行します")
+        # 株みくじ機能を直接実行
+        fortune = get_todays_stock_fortune()
+        if fortune:
+            today = datetime.now().strftime('%Y年%m月%d日')
+            reply = f"🎯 {today}の株みくじ\n\n" \
+                    f"【{fortune['name']}】({fortune['code']})\n" \
+                    f"業種：{fortune['sector']}\n" \
+                    f"コメント：{fortune['comment']}"
+        else:
+            reply = "😢 株みくじデータを読み込めませんでした。"
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
             line_bot_api.reply_message(
                 reply_message_request={
                     "replyToken": event.reply_token,
-                    "messages": [
-                        TextMessage(
-                            text=reply,
-                            quick_reply=QuickReply(items=quick_reply_items)
-                        )
-                    ]
+                    "messages": [TextMessage(text=reply)]
                 }
             )
     
-    elif text.startswith("株みくじ:"):
+    elif normalized_text.startswith("株みくじ:"):
         # 気分を取得
-        mood = text.replace("株みくじ:", "").strip()
+        mood = normalized_text.replace("株みくじ:", "").strip()
         if mood == "おまかせ":
             mood = None
         
@@ -259,6 +259,8 @@ def handle_text_message(event):
 @handler.add(PostbackEvent)
 def handle_postback(event):
     data = event.postback.data
+    app.logger.info(f"📩 受信ポストバック: 「{data}」")
+    app.logger.info(f"📩 ポストバックイベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
     reply = ""
 
     if data == "action=detail":
@@ -266,46 +268,28 @@ def handle_postback(event):
     elif data == "action=holdings":
         reply = "📊 あなたの持ち株を分析します（ダミー）"
     elif data == "action=fortune":
-        # クイックリプライで気分を選択できるようにする
-        quick_reply_items = [
-            QuickReplyItem(action=MessageAction(label="積極的な気分", text="株みくじ:積極的")),
-            QuickReplyItem(action=MessageAction(label="保守的な気分", text="株みくじ:保守的")),
-            QuickReplyItem(action=MessageAction(label="冒険的な気分", text="株みくじ:冒険的")),
-            QuickReplyItem(action=MessageAction(label="長期で考えたい", text="株みくじ:長期的")),
-            QuickReplyItem(action=MessageAction(label="短期で考えたい", text="株みくじ:短期的")),
-            QuickReplyItem(action=MessageAction(label="おまかせ", text="株みくじ:おまかせ"))
-        ]
-        
-        reply = "🎯 今日の気分はどうですか？あなたの気分に合った銘柄をご紹介します！"
-        
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.reply_message(
-                reply_message_request={
-                    "replyToken": event.reply_token,
-                    "messages": [
-                        TextMessage(
-                            text=reply,
-                            quick_reply=QuickReply(items=quick_reply_items)
-                        )
-                    ]
-                }
-            )
+        app.logger.info(f"🎯 ポストバックから株みくじ機能を実行します")
+        # 株みくじ機能を直接実行
+        fortune = get_todays_stock_fortune()
+        if fortune:
+            today = datetime.now().strftime('%Y年%m月%d日')
+            reply = f"🎯 {today}の株みくじ\n\n" \
+                    f"【{fortune['name']}】({fortune['code']})\n" \
+                    f"業種：{fortune['sector']}\n" \
+                    f"コメント：{fortune['comment']}"
+        else:
+            reply = "😢 株みくじデータを読み込めませんでした。"
     else:
         reply = "⚠️ 不明な操作です"
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        if data == "action=fortune":
-            # すでに上記で処理済みなのでここでは何もしない
-            pass
-        else:
-            line_bot_api.reply_message(
-                reply_message_request={
-                    "replyToken": event.reply_token,
-                    "messages": [TextMessage(text=reply)]
-                }
-            )
+        line_bot_api.reply_message(
+            reply_message_request={
+                "replyToken": event.reply_token,
+                "messages": [TextMessage(text=reply)]
+            }
+        )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
