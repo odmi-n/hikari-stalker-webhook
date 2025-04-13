@@ -8,6 +8,9 @@ from linebot.v3.messaging import TextMessage, QuickReply, QuickReplyItem, Messag
 import os
 import logging
 import sys
+import json
+import random
+from datetime import datetime
 from dotenv import load_dotenv
 
 # .env ファイルから環境変数を読み込む
@@ -20,6 +23,47 @@ try:
 except ImportError:
     logging.error("❌ ../hikari-py/db.py が見つかりません")
     # エラーでも続行する（他の機能は使える）
+
+# 株みくじデータを読み込む
+def load_stock_fortune_data():
+    try:
+        with open('stock_fortune.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.error(f"❌ 株みくじデータの読み込みに失敗しました: {e}")
+        # フォールバックデータ（最低限のデータセット）
+        return [
+            {
+                "code": "9432",
+                "name": "日本電信電話",
+                "sector": "情報・通信",
+                "comment": "安定した通信大手。長期保有向き。"
+            },
+            {
+                "code": "7203",
+                "name": "トヨタ自動車",
+                "sector": "輸送用機器",
+                "comment": "世界最大級の自動車メーカー。安定した実績。"
+            },
+            {
+                "code": "8306",
+                "name": "三菱UFJフィナンシャル・グループ",
+                "sector": "銀行業",
+                "comment": "日本最大のメガバンク。配当利回りに期待。"
+            }
+        ]
+
+# 株みくじのデータをグローバル変数として保持
+STOCK_FORTUNE_DATA = load_stock_fortune_data()
+
+# 気分ごとの銘柄特性マッピング
+MOOD_MAPPING = {
+    "積極的": ["情報・通信", "サービス業", "電気機器"],
+    "保守的": ["銀行業", "食料品", "卸売業", "小売業"],
+    "冒険的": ["情報・通信", "医薬品", "サービス業"],
+    "長期的": ["輸送用機器", "電気機器", "食料品", "銀行業"],
+    "短期的": ["情報・通信", "サービス業", "小売業"]
+}
 
 # Flaskアプリケーションの初期化
 app = Flask(__name__)
@@ -58,6 +102,33 @@ def callback():
         abort(400)
 
     return "OK"
+
+# 今日の株みくじをランダムに選ぶ関数
+def get_todays_stock_fortune(mood=None):
+    if not STOCK_FORTUNE_DATA:
+        return None
+    
+    # 日付をシード値として使うことで、同じ日なら同じ結果を返す
+    today = datetime.now().strftime('%Y%m%d')
+    random.seed(today)
+    
+    # 気分に応じた絞り込み
+    filtered_stocks = STOCK_FORTUNE_DATA
+    if mood and mood in MOOD_MAPPING:
+        preferred_sectors = MOOD_MAPPING[mood]
+        filtered_stocks = [stock for stock in STOCK_FORTUNE_DATA if stock['sector'] in preferred_sectors]
+        
+        # 絞り込み結果が0件の場合は全銘柄から選択
+        if not filtered_stocks:
+            filtered_stocks = STOCK_FORTUNE_DATA
+    
+    # ランダムに1銘柄選択
+    fortune = random.choice(filtered_stocks)
+    
+    # シードをリセット
+    random.seed()
+    
+    return fortune
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
@@ -119,6 +190,60 @@ def handle_text_message(event):
                 }
             )
     
+    elif text == "今日の株みくじ":
+        # クイックリプライで気分を選択できるようにする
+        quick_reply_items = [
+            QuickReplyItem(action=MessageAction(label="積極的な気分", text="株みくじ:積極的")),
+            QuickReplyItem(action=MessageAction(label="保守的な気分", text="株みくじ:保守的")),
+            QuickReplyItem(action=MessageAction(label="冒険的な気分", text="株みくじ:冒険的")),
+            QuickReplyItem(action=MessageAction(label="長期で考えたい", text="株みくじ:長期的")),
+            QuickReplyItem(action=MessageAction(label="短期で考えたい", text="株みくじ:短期的")),
+            QuickReplyItem(action=MessageAction(label="おまかせ", text="株みくじ:おまかせ"))
+        ]
+        
+        reply = "🎯 今日の気分はどうですか？あなたの気分に合った銘柄をご紹介します！"
+        
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message(
+                reply_message_request={
+                    "replyToken": event.reply_token,
+                    "messages": [
+                        TextMessage(
+                            text=reply,
+                            quick_reply=QuickReply(items=quick_reply_items)
+                        )
+                    ]
+                }
+            )
+    
+    elif text.startswith("株みくじ:"):
+        # 気分を取得
+        mood = text.replace("株みくじ:", "").strip()
+        if mood == "おまかせ":
+            mood = None
+        
+        # 気分に合わせた株みくじを取得
+        fortune = get_todays_stock_fortune(mood)
+        if fortune:
+            today = datetime.now().strftime('%Y年%m月%d日')
+            mood_text = f"【{mood}な気分向け】" if mood else ""
+            reply = f"🎯 {today}の株みくじ {mood_text}\n\n" \
+                    f"【{fortune['name']}】({fortune['code']})\n" \
+                    f"業種：{fortune['sector']}\n" \
+                    f"コメント：{fortune['comment']}"
+        else:
+            reply = "😢 株みくじデータを読み込めませんでした。"
+        
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message(
+                reply_message_request={
+                    "replyToken": event.reply_token,
+                    "messages": [TextMessage(text=reply)]
+                }
+            )
+    
     else:
         reply = f"🤖 メッセージを受け取りました: 「{text}」\n（後で分析Botに接続予定）"
         
@@ -141,18 +266,46 @@ def handle_postback(event):
     elif data == "action=holdings":
         reply = "📊 あなたの持ち株を分析します（ダミー）"
     elif data == "action=fortune":
-        reply = "🎯 今日の株みくじ：〇〇テクノロジーズ（ダミー）"
+        # クイックリプライで気分を選択できるようにする
+        quick_reply_items = [
+            QuickReplyItem(action=MessageAction(label="積極的な気分", text="株みくじ:積極的")),
+            QuickReplyItem(action=MessageAction(label="保守的な気分", text="株みくじ:保守的")),
+            QuickReplyItem(action=MessageAction(label="冒険的な気分", text="株みくじ:冒険的")),
+            QuickReplyItem(action=MessageAction(label="長期で考えたい", text="株みくじ:長期的")),
+            QuickReplyItem(action=MessageAction(label="短期で考えたい", text="株みくじ:短期的")),
+            QuickReplyItem(action=MessageAction(label="おまかせ", text="株みくじ:おまかせ"))
+        ]
+        
+        reply = "🎯 今日の気分はどうですか？あなたの気分に合った銘柄をご紹介します！"
+        
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message(
+                reply_message_request={
+                    "replyToken": event.reply_token,
+                    "messages": [
+                        TextMessage(
+                            text=reply,
+                            quick_reply=QuickReply(items=quick_reply_items)
+                        )
+                    ]
+                }
+            )
     else:
         reply = "⚠️ 不明な操作です"
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message(
-            reply_message_request={
-                "replyToken": event.reply_token,
-                "messages": [TextMessage(text=reply)]
-            }
-        )
+        if data == "action=fortune":
+            # すでに上記で処理済みなのでここでは何もしない
+            pass
+        else:
+            line_bot_api.reply_message(
+                reply_message_request={
+                    "replyToken": event.reply_token,
+                    "messages": [TextMessage(text=reply)]
+                }
+            )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
