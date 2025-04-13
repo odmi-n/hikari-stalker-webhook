@@ -190,7 +190,7 @@ def handle_text_message(event):
                 }
             )
     
-    elif text == "今日の株みくじ":
+    elif text == "今日の株みくじをする！🥠":
         # クイックリプライで気分を選択できるようにする
         quick_reply_items = [
             QuickReplyItem(action=MessageAction(label="積極的な気分", text="株みくじ:積極的")),
