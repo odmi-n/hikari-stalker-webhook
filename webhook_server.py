@@ -133,19 +133,20 @@ def get_todays_stock_fortune(mood=None):
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     text = event.message.text
-    app.logger.info(f"📩 受信テキスト: 「{text}」")
-    app.logger.info(f"📩 イベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
+    app.logger.info(f"受信テキスト: 「{text}」")
+    app.logger.info(f"テキスト長さ: {len(text)}")
+    app.logger.info(f"テキストバイト表現: {[ord(c) for c in text]}")
+    app.logger.info(f"イベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
     
     # すべての受信パターンに対応するために、前処理でテキストを標準化
     normalized_text = text.strip()
     
-    # テキストの前方一致チェック関数
-    def starts_with_any(text, prefixes):
-        return any(text.startswith(prefix) for prefix in prefixes)
-    
-    # テキストの部分一致チェック関数
-    def contains_any(text, keywords):
-        return any(keyword in text for keyword in keywords)
+    # 比較用のアンカーテキスト
+    target_text = "今日の株みくじをする！"
+    app.logger.info(f"比較テキスト: 「{target_text}」")
+    app.logger.info(f"比較テキスト長さ: {len(target_text)}")
+    app.logger.info(f"比較テキストバイト表現: {[ord(c) for c in target_text]}")
+    app.logger.info(f"テキスト一致判定: {normalized_text == target_text}")
     
     if normalized_text == "光通信を分析":
         # 最新の銘柄を取得して QuickReply を動的に作成
@@ -203,19 +204,19 @@ def handle_text_message(event):
                 }
             )
     
-    # 株みくじは完全一致のみを受け付ける
-    elif normalized_text == "今日の株みくじをする！":
-        app.logger.info(f"🎯 株みくじ機能を実行します - 完全一致")
+    # 株みくじの処理 - より柔軟な比較
+    elif "今日の株みくじをする" in normalized_text:
+        app.logger.info(f"株みくじ機能を実行します - 部分一致")
         # 株みくじ機能を直接実行
         fortune = get_todays_stock_fortune()
         if fortune:
             today = datetime.now().strftime('%Y年%m月%d日')
-            reply = f"🎯 {today}の株みくじ\n\n" \
+            reply = f"{today}の株みくじ\n\n" \
                     f"【{fortune['name']}】({fortune['code']})\n" \
                     f"業種：{fortune['sector']}\n" \
                     f"コメント：{fortune['comment']}"
         else:
-            reply = "😢 株みくじデータを読み込めませんでした。"
+            reply = "株みくじデータを読み込めませんでした。"
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -228,7 +229,7 @@ def handle_text_message(event):
     
     elif normalized_text.startswith("株みくじ:"):
         # 株みくじ:で始まるテキストも受け付けない
-        reply = "⚠️ この機能は現在ご利用いただけません。「今日の株みくじをする！」とメッセージを送信してください。"
+        reply = "この機能は現在ご利用いただけません。「今日の株みくじをする！」とメッセージを送信してください。"
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -241,8 +242,8 @@ def handle_text_message(event):
     
     else:
         # デバッグ用に受信したメッセージが未処理だった場合、詳細なログを記録
-        app.logger.warning(f"⚠️ 未処理のメッセージ: 「{text}」")
-        reply = f"🤖 メッセージを受け取りました: 「{text}」\n（後で分析Botに接続予定）"
+        app.logger.warning(f"未処理のメッセージ: 「{text}」")
+        reply = f"メッセージを受け取りました: 「{text}」\n（後で分析Botに接続予定）"
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -256,28 +257,28 @@ def handle_text_message(event):
 @handler.add(PostbackEvent)
 def handle_postback(event):
     data = event.postback.data
-    app.logger.info(f"📩 受信ポストバック: 「{data}」")
-    app.logger.info(f"📩 ポストバックイベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
+    app.logger.info(f"受信ポストバック: 「{data}」")
+    app.logger.info(f"ポストバックイベント詳細: type={event.type}, source={event.source.type}, user_id={event.source.user_id}")
     reply = ""
 
     if data == "action=detail":
-        reply = "📄 報告書の詳細をお送りします（ダミー）"
+        reply = "報告書の詳細をお送りします（ダミー）"
     elif data == "action=holdings":
-        reply = "📊 あなたの持ち株を分析します（ダミー）"
+        reply = "あなたの持ち株を分析します（ダミー）"
     elif data == "action=fortune":
-        app.logger.info(f"🎯 ポストバックから株みくじ機能を実行します")
+        app.logger.info(f"ポストバックから株みくじ機能を実行します")
         # 株みくじ機能を直接実行
         fortune = get_todays_stock_fortune()
         if fortune:
             today = datetime.now().strftime('%Y年%m月%d日')
-            reply = f"🎯 {today}の株みくじ\n\n" \
+            reply = f"{today}の株みくじ\n\n" \
                     f"【{fortune['name']}】({fortune['code']})\n" \
                     f"業種：{fortune['sector']}\n" \
                     f"コメント：{fortune['comment']}"
         else:
-            reply = "😢 株みくじデータを読み込めませんでした。"
+            reply = "株みくじデータを読み込めませんでした。"
     else:
-        reply = "⚠️ 不明な操作です"
+        reply = "不明な操作です"
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
